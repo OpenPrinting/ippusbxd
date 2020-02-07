@@ -3,12 +3,14 @@
 #endif
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <wchar.h>
 #include <libxml/tree.h>
 #include <libxml/parser.h>
 #include <curl/curl.h>
 #include "capabilities.h"
+#include "logging.h"
 
 struct cap
 {
@@ -169,40 +171,52 @@ is_scanner_present(ippScanner *scanner, const char *name) {
     CURL *curl_handle = NULL;
     struct cap *var = NULL;
     char tmp[1024] = { 0 };
-
+    int pass = 0;
+    NOTE("is_scanner_present");
     if (!scanner || name[0] == 0) return 0;
+    NOTE("go is_scanner_present");
     const char *scanner_capabilities = "eSCL/ScannerCapabilities";
 
     var = (struct cap *)calloc(1, sizeof(struct cap));
+    NOTE("1 - is_scanner_present");
     if (var == NULL)
       return 0;
+    NOTE("2 - is_scanner_present");
     var->memory = malloc(1);
     var->size = 0;
     curl_handle = curl_easy_init();
     strcpy(tmp, name);
     strcat(tmp, scanner_capabilities);
-        fprintf(stderr, "Path : %s\n", tmp);
+    NOTE("3 - is_scanner_present %s", tmp);
     curl_easy_setopt(curl_handle, CURLOPT_URL, tmp);
     if (strncmp(name, "https", 5) == 0) {
+        NOTE("4 - is_scanner_present SSL");
         curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0L);
     }
+    NOTE("5 - is_scanner_present");
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, memory_callback_c);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)var);
+new_escl:
+    sleep(3);
     if (curl_easy_perform(curl_handle) != CURLE_OK) {
+        pass++;
+        if (pass < 5)
+          goto new_escl;
+        NOTE("6 - is_scanner_present URL ERROR");
         fprintf(stderr, "Error : Curl\n");
         return 0;
     }
     // Ouverture du fichier XML
     doc = xmlReadMemory(var->memory, var->size, "ScannerCapabilities.xml", NULL, 0); //xmlParseFile("ScannerCapabilities.xml");
     if (doc == NULL) {
-        fprintf(stderr, "Document XML invalide\n");
+        NOTE("Document XML invalide\n");
         return 0; 
     }
     // Récupération de la racine
     racine = xmlDocGetRootElement(doc);
     if (racine == NULL) {
-        fprintf(stderr, "Document XML vierge\n");
+        NOTE("Document XML vierge\n");
         xmlFreeDoc(doc);
         return 0;
     }
@@ -210,9 +224,10 @@ is_scanner_present(ippScanner *scanner, const char *name) {
     parcours_prefixe(racine, afficher_noeud, scanner);
     if (!scanner->duplex) scanner->duplex = strdup("F");
     
-    //printf("txt = [\n\"representation=%s\"\n\"note=\"\n\"UUID=%s\"\n\"adminurl=%s\"\n\"duplex=%s\"\n\"is=%s\"\n\"cs=%s\"\n\"pdl=%s\"\n\"ty=%s\"\n\"rs=eSCL\"\n\"vers=%s\"\n\"txtvers=1\"\n]",
-    //     ippscanner->representation, ippscanner->uuid, ippscanner->adminurl, ippscanner->duplex, ippscanner->is, ippscanner->cs, ippscanner->pdl, ippscanner->ty, ippscanner->vers);
+    NOTE("txt = [\n\"representation=%s\"\n\"note=\"\n\"UUID=%s\"\n\"adminurl=%s\"\n\"duplex=%s\"\n\"is=%s\"\n\"cs=%s\"\n\"pdl=%s\"\n\"ty=%s\"\n\"rs=eSCL\"\n\"vers=%s\"\n\"txtvers=1\"\n]",
+         scanner->representation, scanner->uuid, scanner->adminurl, scanner->duplex, scanner->is, scanner->cs, scanner->pdl, scanner->ty, scanner->vers);
     xmlFreeDoc(doc);
+    //     NOTE("Document XML OK\n");
 
     return 1;
 }

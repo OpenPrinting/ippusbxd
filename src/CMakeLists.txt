@@ -48,7 +48,6 @@ usb.c
 logging.c
 options.c
 dnssd.c
-capabilities.c
 )
 target_link_libraries(ippusbxd ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(ippusbxd ${LIBUSB_LIBRARIES})
@@ -57,3 +56,14 @@ target_link_libraries(ippusbxd ${AVAHICLIENT_LIBRARIES})
 target_link_libraries(ippusbxd ${LIBXML2_LIBRARIES})
 target_link_libraries(ippusbxd ${CURL_LIBRARIES})
 
+add_executable(esclusbxd
+esclusbxd.c
+capabilities.c
+logging.c
+options.c
+)
+target_link_libraries(esclusbxd ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(esclusbxd ${AVAHICOMMON_LIBRARIES})
+target_link_libraries(esclusbxd ${AVAHICLIENT_LIBRARIES})
+target_link_libraries(esclusbxd ${LIBXML2_LIBRARIES})
+target_link_libraries(esclusbxd ${CURL_LIBRARIES})
