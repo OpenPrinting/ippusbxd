@@ -1,5 +1,0 @@
-exe/ippusbxd usr/sbin/
-exe/esclusbxd usr/sbin/
-systemd-udev/ipptousb usr/sbin/
-src/apparmor/usr.sbin.ippusbxd etc/apparmor.d/
-systemd-udev/55-ippusbxd.rules lib/udev/rules.d/
