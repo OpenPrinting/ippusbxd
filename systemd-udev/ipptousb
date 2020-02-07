@@ -1,0 +1,4 @@
+#!/bin/bash
+
+/usr/sbin/esclusbxd 60000 &
+/usr/sbin/ippusbxd $@ &

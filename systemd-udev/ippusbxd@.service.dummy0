@@ -4,5 +4,5 @@ Description=Daemon to make IPP-over-USB printers available as network printers (
 [Service]
 Type=forking
 GuessMainPID=true
-ExecStart=/usr/sbin/ippusbxd --bus-device %I --from-port 60000 --interface dummy0 --logging
+ExecStart=/usr/sbin/ipptousb --bus-device %I --from-port 60000 --interface dummy0 --logging
 # ExecStop= Not needed, ippusbxd stops by itself on shutdown of the printer
