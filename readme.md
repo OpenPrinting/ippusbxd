@@ -29,6 +29,27 @@ RAM. This gives ippusbxd a minimal ram footprint.
 7. Near zero CPU usage while idle
 8. Low CPU usage while working
 
+## Before you begin: ippusbxd or ipp-usb?
+
+ippusbxd was the first approach to implement IPP-over-USB for Linux
+and similar, POSIX-style operating systems. Its architecture is
+simple: ippusbxd simply relays a TCP connection to USB. This does not
+work very well.
+
+Bumping into problems when trying to scan via IPP-over-USB with ippusbxd, the author of the ["airsane" SANE backend](https://github.com/alexpevzner/sane-airscan), Alexander Pevzner, created the alternative approach [**ipp-usb**](https://github.com/OpenPrinting/ipp-usb) and writes:
+
+> Unfortunately, the naive implementation, which simply relays a TCP connection to USB, does not work. It happens because closing the TCP connection on the client side has a useful side effect of discarding all data sent to this connection from the server side, but it does not happen with USB connections. In the case of USB, all data not received by the client will remain in the USB buffers, and the next time the client connects to the device, it will receive unexpected data, left from the previous abnormally completed request.
+>
+> Actually, it is an obvious flaw in the IPP-over-USB standard, but we have to live with it.
+>
+>So the implementation, once the HTTP request is sent, must read the entire HTTP response, which means that the implementation must understand the HTTP protocol, and effectively implement a HTTP reverse proxy, backed by the IPP-over-USB connection to the device.
+>
+>And this is what the ipp-usb program actually does.
+
+ipp-usb is written in Go, as Go provides an HTTP library with the needed functionality, which is missing in C. As Go links executables statically, they have a large memory footprint. As some operating system vendors (like ChromeOS) therefore do not accept Go programs, the ippusbxd project will be continued and pathes to fix ippusbxd are welcome.
+
+Generally, I highly recommend to use ipp-usb instead of ippusbxd. It works absolutely reliably, wheras ippusbxd often has problems, especially with the web admin interfaces of the devices.
+
 ## Building
 
 To build ippusbxd you must have the development headers of libusb 1.0,
