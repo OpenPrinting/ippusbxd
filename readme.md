@@ -36,7 +36,7 @@ and similar, POSIX-style operating systems. Its architecture is
 simple: ippusbxd simply relays a TCP connection to USB. This does not
 work very well.
 
-Bumping into problems when trying to scan via IPP-over-USB with ippusbxd, the author of the ["airsane" SANE backend](https://github.com/alexpevzner/sane-airscan), Alexander Pevzner, created the alternative approach [**ipp-usb**](https://github.com/OpenPrinting/ipp-usb) and writes:
+Bumping into problems when trying to scan via IPP-over-USB with ippusbxd, the author of the ["airscan" SANE backend](https://github.com/alexpevzner/sane-airscan), Alexander Pevzner, created the alternative approach [**ipp-usb**](https://github.com/OpenPrinting/ipp-usb) and writes:
 
 > Unfortunately, the naive implementation, which simply relays a TCP connection to USB, does not work. It happens because closing the TCP connection on the client side has a useful side effect of discarding all data sent to this connection from the server side, but it does not happen with USB connections. In the case of USB, all data not received by the client will remain in the USB buffers, and the next time the client connects to the device, it will receive unexpected data, left from the previous abnormally completed request.
 >
