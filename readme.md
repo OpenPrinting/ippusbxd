@@ -99,13 +99,17 @@ on localhost. and one exposing the printer on the dummy0 interface.
 Exposing the printer on localhost is the way how the IPP-over-USB
 standard is intended and therefore this is how it is intended to
 proceed on production systems and especially on Linux distributions.
-Disadvantage of this method is that Avahi needs to be modified so that
-it advertises services on localhost and these only on the local
-machine.
 
-Exposing the printer on the dummy0 interface does not require any
-changes on Avahi, but it is more awkward to set up the system and to
-access the printer and its web administration interface.
+This requires Avahi 0.8.0 or newer, as older versions of Avahi do not
+support advertising services on localhost. The new Avahi versions
+allow advertising services on the loopback network interface "lo" only
+to the local machine, what is what we need here. Older Avahi versions
+can be used after applying a simple patch though.
+
+Exposing the printer on the dummy0 interface does not require Avahi
+0.8.0 or any changes on older Avahi versions, but it is more awkward
+to set up the system and to access the printer and its web
+administration interface.
 
 ### 1. Expose the printer on localhost
 
@@ -134,8 +138,9 @@ minutes. Out of UDEV rules you can only start programs which do not
 need to keep running permanently, like daemons. Therefore we use
 systemd here.
 
-Apply the following patch to the source code of Avahi (tested with
-version 0.6.32 and 0.7):
+Make sure that you have Avahi 0.8.0 or newer installed or apply the
+following patch to the source code of older Avahi versions (tested
+with version 0.6.32 and 0.7):
 
 ```
 --- avahi-core/iface-linux.c~
@@ -196,12 +201,15 @@ version 0.6.32 and 0.7):
                  r->txt_record ? r->txt_record->data.txt.string_list : NULL,
 ```
 
-Build and install Avahi. This makes Avahi not only advertising
-services on the usual network interfaces but also on the "lo"
-(loopback) interface (localhost). The services on the loopback
-interface (on localhost) are only advertised on the local machine, so
-no additional info gets exposed to the network, especially no
-local-only service gets shared by this.
+Build and install Avahi.
+
+Avahi 0.8.0 and newer have this patch already included.
+
+This makes Avahi not only advertising services on the usual network
+interfaces but also on the "lo" (loopback) interface (localhost). The
+services on the loopback interface (on localhost) are only advertised
+on the local machine, so no additional info gets exposed to the
+network, especially no local-only service gets shared by this.
 
 This works well as long as your machine is connected to some kind of
 network (does not necessarily need to be a connection to the Internet,
@@ -209,17 +217,6 @@ a virtual network interface to virtual machines running locally is
 enough). It is possible that the advertising of the printer stops if
 the loopback interface is the only network interface running due to
 lack of a multicast-capable interface.
-
-The patch above is already submitted upstream and also the problem
-with network-less machines is reported. See
-
-https://github.com/lathiat/avahi/issues/125
-
-With this done, we have a completely standard-conforming support for
-IPP-over-USB. For the time being we have to take this into account in
-automated printer setup processes and in printer setup
-tools. cups-browsed for example uses the numeric IP if it is a local
-(127.X.Y.Z) one.
 
 Now we can restart systemd and UDEV to activate all this:
 
@@ -235,6 +232,12 @@ started and makes the printer available under the IPP URI
 ipp://localhost:60000/ipp/print
 ```
 
+the scanner (if the device has one built-in) under
+
+```
+http://localhost:60000/eSCL
+```
+
 and its web administration interface under
 
 ```
@@ -243,7 +246,7 @@ http://localhost:60000/
 
 (if you have problems with the Chrome browser, use Firefox).
 
-It is also DNS-SD-broadcasted via our modified Avahi on the lo interface.
+It is also DNS-SD-broadcasted via Avahi on the lo interface.
 
 To set up a print queue you could simply run
 
@@ -299,7 +302,24 @@ Now you have a print queue whenever the printer is available and no
 print queue cluttering your print dialogs when the printer is not
 available.
 
+If your printer is a multi-function device with a built-in scanner it
+supports the eSCL (AirScan) scanning standard in most cases. This
+standard is supported by the "escl" backend in SANE 1.0.29 or newer or
+by the "airscan" backend:
+
+https://github.com/alexpevzner/sane-airscan
+
+To actually scan you simply start the scanning software of your choice
+and select the scanner device entry for your printer. If your device
+is connected both via network and IPP-over-USB, the latter is marked
+with "USB".
+
+
 ### 2. Expose the printer on the dummy0 interface
+
+This is an alternative method if you have Avahi 0.7.x or older
+installed and do not want to patch it. With Avahi 0.8.0 or newer you
+can use the localhost-based method described above.
 
 First, install ippusbxd:
 
@@ -373,6 +393,12 @@ started and makes the printer available under the IPP URI
 ipp://10.0.0.1:60000/ipp/print
 ```
 
+the scanner (if the device has one built-in) under
+
+```
+http://10.0.0.1:60000/eSCL
+```
+
 and its web administration interface under
 
 ```
@@ -437,12 +463,25 @@ Now you have a print queue whenever the printer is available and no
 print queue cluttering your print dialogs when the printer is not
 available.
 
+If your printer is a multi-function device with a built-in scanner it
+supports the eSCL (AirScan) scanning standard in most cases. This
+standard is supported by the "escl" backend in SANE 1.0.29 or newer or
+by the "airscan" backend:
+
+https://github.com/alexpevzner/sane-airscan
+
+To actually scan you simply start the scanning software of your choice
+and select the scanner device entry for your printer. If your device
+is connected both via network and IPP-over-USB, the latter is marked
+with "USB".
+
 
 ## Presentation on IPPUSBXD
 
-On August 2014 at the Fall Printer Working Group meeting I gave a presentation
-on ippusbxd and the ipp over usb protocol. Slides from this presentation can be
-found in the docs folder.
+On August 2014 at the Fall Printer Working Group meeting Daniel
+Dressler gave a presentation on ippusbxd and the IPP-over-USB
+protocol. Slides from this presentation can be found in the docs
+folder.
 
 ## IPPUSBXD, the name
 
