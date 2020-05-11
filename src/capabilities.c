@@ -216,6 +216,7 @@ char * get_format_paper(char *val)
 	       
 	       if (!tmp) continue;
 	       tmp = strchr(val, '}');
+	       if (!tmp) continue;
 	       a = strlen(val) - strlen(tmp);
 	       strncpy(test2, val, a);
 	       if (strchr(test2, '-') == NULL)
