@@ -379,13 +379,10 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
       httpClearFields(http);
       httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
       httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
-      if (httpHead(http, ressource))
+      if (httpReconnect2(http, 30000, NULL))
       {
-        if (httpReconnect2(http, 30000, NULL))
-        {
-          status = HTTP_STATUS_ERROR;
-          break;
-        }
+         status = HTTP_STATUS_ERROR;
+         break;
       }
 
       while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
