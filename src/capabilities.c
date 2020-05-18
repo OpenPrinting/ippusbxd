@@ -14,6 +14,7 @@
 #include <cups/cups.h>
 #include "capabilities.h"
 #include "logging.h"
+#include "options.h"
 
 struct cap
 {
@@ -498,12 +499,19 @@ int
 is_scanner_present(ippScanner *scanner, int port) {
     xmlDocPtr doc;
     xmlNodePtr racine;
+    char *memory = NULL;
     int size = 0;
+    int count_fails = 0;
     NOTE("is_scanner_present");
     if (!scanner) return 0;
     NOTE("go is_scanner_present");
-
-    char *memory = http_request("127.0.0.1", "/eSCL/ScannerCapabilities", port, &size);
+fails:
+    memory = http_request("127.0.0.1", "/eSCL/ScannerCapabilities", port, &size);
+    if (!memory && count_fails < 5) {
+      count_fails++;
+      usleep(50);
+      goto fails;
+    }
     NOTE("Capabilites[\n%s\n]\n", memory);
     // Ouverture du fichier XML
     doc = xmlReadMemory(memory, size, "ScannerCapabilities.xml", NULL, 0); //xmlParseFile("ScannerCapabilities.xml");
