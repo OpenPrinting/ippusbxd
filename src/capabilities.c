@@ -353,18 +353,16 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
   char *memory = (char*)calloc(1, sizeof (char));
   char *tmp = NULL;
 //////////////////////////////////////////////////////////////////////////////////////////////////////:
-
-
-    http = httpConnect2(hostname, port, NULL, AF_UNSPEC, HTTP_ENCRYPTION_IF_REQUESTED, 1, 30000, NULL);
-    if (http == NULL)
+  http = httpConnect2(hostname, port, NULL, AF_UNSPEC, HTTP_ENCRYPTION_NEVER, 1, 30000, NULL);
+  if (http == NULL)
     {
       perror(hostname);
       return 0;
     }
 
-    NOTE("Checking file \"%s\"...\n", ressource);
+  NOTE("Checking file \"%s\"...\n", ressource);
 
-    do
+  do
     {
       if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
       {
@@ -377,45 +375,20 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
       }
 
       httpClearFields(http);
-      httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
       httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
-      if (httpReconnect2(http, 30000, NULL))
+      if (httpGet(http, ressource))
       {
-         status = HTTP_STATUS_ERROR;
-         break;
+        if (httpReconnect2(http, 30000, NULL))
+        {
+          status = HTTP_STATUS_ERROR;
+          break;
+        }
       }
 
       while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
 
-      if (status == HTTP_STATUS_UNAUTHORIZED)
-      {
-       /*
-	* Flush any error message...
-	*/
-
-	httpFlush(http);
-
-       /*
-	* See if we can do authentication...
-	*/
-
-	if (cupsDoAuthentication(http, "GET", ressource))
-	{
-	  status = HTTP_STATUS_CUPS_AUTHORIZATION_CANCELED;
-	  break;
-	}
-
-	if (httpReconnect2(http, 30000, NULL))
-	{
-	  status = HTTP_STATUS_ERROR;
-	  break;
-	}
-
-        return 0;
-      }
     }
-    while (status == HTTP_STATUS_UNAUTHORIZED ||
-           status == HTTP_STATUS_UPGRADE_REQUIRED);
+    while (status == HTTP_STATUS_UPGRADE_REQUIRED);
 
     if (status != HTTP_STATUS_OK)
       NOTE("HEAD failed with status %d...\n", status);
@@ -438,7 +411,6 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
       }
 
       httpClearFields(http);
-      httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
       httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
       httpSetField(http, HTTP_FIELD_ACCEPT_ENCODING, encoding);
 
@@ -454,7 +426,7 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
       while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
 
     }
-    while (status == HTTP_STATUS_UNAUTHORIZED || status == HTTP_STATUS_UPGRADE_REQUIRED);
+    while (status == HTTP_STATUS_UPGRADE_REQUIRED);
 
     if (status != HTTP_STATUS_OK) {
       NOTE("GET failed with status %d...\n", status);
