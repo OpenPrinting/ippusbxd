@@ -376,42 +376,6 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
 
       httpClearFields(http);
       httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
-      if (httpGet(http, ressource))
-      {
-        if (httpReconnect2(http, 30000, NULL))
-        {
-          status = HTTP_STATUS_ERROR;
-          break;
-        }
-      }
-
-      while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
-
-    }
-    while (status == HTTP_STATUS_UPGRADE_REQUIRED);
-
-    if (status != HTTP_STATUS_OK)
-      NOTE("HEAD failed with status %d...\n", status);
-
-    encoding = httpGetContentEncoding(http);
-
-    NOTE("Requesting file \"%s\" (Accept-Encoding: %s)...\n", ressource,
-           encoding ? encoding : "identity");
-
-    do
-    {
-      if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
-      {
-	httpClearFields(http);
-	if (httpReconnect2(http, 30000, NULL))
-	{
-          status = HTTP_STATUS_ERROR;
-          break;
-	}
-      }
-
-      httpClearFields(http);
-      httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
       httpSetField(http, HTTP_FIELD_ACCEPT_ENCODING, encoding);
 
       if (httpGet(http, ressource))
@@ -426,9 +390,10 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
       while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
 
     }
-    while (status == HTTP_STATUS_UPGRADE_REQUIRED);
+  while (status == HTTP_STATUS_UPGRADE_REQUIRED);
 
-    if (status != HTTP_STATUS_OK) {
+  if (status != HTTP_STATUS_OK)
+    {
       NOTE("GET failed with status %d...\n", status);
       return NULL;
     }
