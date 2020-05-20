@@ -433,6 +433,7 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
       return NULL;
     }
 
+  NOTE("GET success before read escl capabilities.\n");
   total = 0;
   while ((bytes = httpRead2(http, buffer, (SIZE_DATA - 1))) > 0)
   {
@@ -470,17 +471,10 @@ is_scanner_present(ippScanner *scanner, int port) {
     xmlNodePtr racine;
     char *memory = NULL;
     int size = 0;
-    int count_fails = 0;
     NOTE("is_scanner_present");
     if (!scanner) return 0;
     NOTE("go is_scanner_present");
-fails:
     memory = http_request("127.0.0.1", "/eSCL/ScannerCapabilities", port, &size);
-    if (!memory && count_fails < 5) {
-      count_fails++;
-      usleep(50);
-      goto fails;
-    }
     NOTE("Capabilites[\n%s\n]\n", memory);
     // Ouverture du fichier XML
     doc = xmlReadMemory(memory, size, "ScannerCapabilities.xml", NULL, 0); //xmlParseFile("ScannerCapabilities.xml");
