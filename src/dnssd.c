@@ -258,6 +258,12 @@ void * dnssd_escl_register(void *data)
   }
   else
     ipp_txt = avahi_string_list_add_printf(ipp_txt, "Fax=F");
+  if (printer->mfg)
+    ipp_txt = avahi_string_list_add_printf(ipp_txt, "usb_MFG=%s", printer->mfg);
+  if (printer->mfg)
+    ipp_txt = avahi_string_list_add_printf(ipp_txt, "usb_MDL=%s", printer->mdl);
+  if (printer->cmd)
+    ipp_txt = avahi_string_list_add_printf(ipp_txt, "usb_CMD=%s", printer->cmd);
 
   NOTE("Printer TXT[\n\tadminurl=%s\n\tUUID=%s\t\n]\n", printer->adminurl, printer->uuid);
 
@@ -367,14 +373,6 @@ int dnssd_register(AvahiClient *c)
   const char      *make;                /* I - Manufacturer */
   const char      *model;               /* I - Model name */
   const char      *serial = NULL;
-  const char      *cmd;
-  const char      *urf = NULL;
-  int             pwgraster = 0,
-                  appleraster = 0,
-                  pclm = 0,
-                  pdf = 0,
-                  jpeg = 0;
-  char            formats[1024];        /* I - Supported formats */
   char            *ptr;
   int             error;
   pthread_t       thread_escl;
@@ -410,17 +408,6 @@ int dnssd_register(AvahiClient *c)
     }
   if (ptr)
     serial = strchr(ptr, ':') + 1;
-  if ((ptr = strcasestr(dev_id, "URF:")) == NULL)
-    NOTE("No URF info in device ID");
-  if (ptr)
-    urf = strchr(ptr, ':') + 1;
-  if ((ptr = strcasestr(dev_id, "CMD:")) == NULL)
-    if ((ptr = strcasestr(dev_id, "COMMAND SET:")) == NULL) {
-      ERR("No page description language info in device ID");
-      free(dev_id);
-      return -1;
-    }
-  cmd = strchr(ptr, ':') + 1;
   ptr = strchr(make, ';');
   if (ptr) *ptr = '\0';
   ptr = strchr(model, ';');
@@ -429,36 +416,6 @@ int dnssd_register(AvahiClient *c)
     ptr = strchr(serial, ';');
     if (ptr) *ptr = '\0';
   }
-  ptr = strchr(cmd, ';');
-  if (ptr) *ptr = '\0';
-  if (urf) {
-    ptr = strchr(urf, ';');
-    if (ptr) *ptr = '\0';
-  }
-
-  if ((ptr = strcasestr(cmd, "pwg")) != NULL &&
-      (ptr = strcasestr(ptr, "raster")) != NULL)
-    pwgraster = 1;
-  if (((ptr = strcasestr(cmd, "apple")) != NULL &&
-       (ptr = strcasestr(ptr, "raster")) != NULL) ||
-      ((ptr = strcasestr(cmd, "urf")) != NULL) ||
-      urf != NULL)
-    appleraster = 1;
-  if ((ptr = strcasestr(cmd, "pclm")) != NULL)
-    pclm = 1;
-  if ((ptr = strcasestr(cmd, "pdf")) != NULL)
-    pdf = 1;
-  if ((ptr = strcasestr(cmd, "jpeg")) != NULL ||
-      (ptr = strcasestr(cmd, "jpg")) != NULL)
-    jpeg = 1;
-  snprintf(formats, sizeof(formats),"%s%s%s%s%s",
-	   (pdf ? "application/pdf," : ""),
-	   (pwgraster ? "image/pwg-raster," : ""),
-	   (appleraster ? "image/urf," : ""),
-	   (pclm ? "application/PCLm," : ""),
-	   (jpeg ? "image/jpeg," : ""));
-  formats[strlen(formats) - 1] = '\0';
-
  /*
   * Additional printer properties
   */
@@ -477,8 +434,6 @@ int dnssd_register(AvahiClient *c)
 
   ipp_txt = NULL;
   ipp_txt = avahi_string_list_add_printf(ipp_txt, "rp=ipp/print");
-  ipp_txt = avahi_string_list_add_printf(ipp_txt, "usb_MFG=%s", make);
-  ipp_txt = avahi_string_list_add_printf(ipp_txt, "usb_MDL=%s", model);
   ipp_txt = avahi_string_list_add_printf(ipp_txt, "priority=60");
   ipp_txt = avahi_string_list_add_printf(ipp_txt, "txtvers=1");
   ipp_txt = avahi_string_list_add_printf(ipp_txt, "qtotal=1");
@@ -533,10 +488,9 @@ int dnssd_register(AvahiClient *c)
     error = avahi_entry_group_add_service_subtype(
         g_options.dnssd_data->ipp_ref,
         (g_options.interface ? (int)if_nametoindex(g_options.interface)
-                             : AVAHI_IF_UNSPEC),
+        : AVAHI_IF_UNSPEC),
         AVAHI_PROTO_UNSPEC, 0, dnssd_name, "_ipp._tcp", NULL,
-        (appleraster && !pwgraster ? "_universal._sub._ipp._tcp"
-                                   : "_print._sub._ipp._tcp"));
+        "_print._sub._ipp._tcp");
     if (error)
       ERR("Error registering subtype for IPP printer %s (_print._sub._ipp._tcp "
           "or _universal._sub._ipp._tcp): %d",

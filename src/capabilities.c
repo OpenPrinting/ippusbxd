@@ -232,6 +232,20 @@ char * get_format_paper(char *val)
    return get_format(x_dim_max, y_dim_max);
 }
 
+static char *
+_search_tag(char *buffer, const char *tag)
+{
+    char *result = NULL;
+    char *tmp = strstr(buffer, tag);
+    if (tmp) {
+       char *c = strchr(tmp, ';');
+       *c = 0;
+       result = strdup(tmp + 4);
+       *c = ';';
+    }
+    return result;
+}
+
 int
 ipp_request(ippPrinter *printer, int port)
 {
@@ -265,6 +279,15 @@ ipp_request(ippPrinter *printer, int port)
     if (!attr_name) continue;
     if (!strcasecmp(attr_name, "printer-icons"))
        printer->representation = strdup(buffer);
+    else if (!strcasecmp(attr_name, "printer-device-id")) {
+//     usb_MDL:          MDL, extracted from "printer-device-id"
+//     usb_MFG:          MFG, extracted from "printer-device-id"
+//     usb_CMD:          CMD, extracted from "printer-device-id"
+//     MFG:Brother;CMD:PJL,HBP,URF;MDL:DCP-L2530DW series;CLS:PRINTER;CID:Brother Laser Type1;URF:W8,CP1,IS4-1,MT1-3-4-5-8,OB10,PQ3-4-5,RS300-600-1200,V1.4,DM1;[en]
+       printer->mfg = _search_tag(buffer, "MFG:");
+       printer->mdl = _search_tag(buffer, "MDL:");
+       printer->cmd = _search_tag(buffer, "CMD:");
+    }
     else if(!strcasecmp(attr_name, "printer-uuid"))
        printer->uuid = strdup(buffer + 9);
     else if(!strcasecmp(attr_name, "printer-more-info"))
