@@ -214,16 +214,31 @@ void dnssd_shutdown()
 
 void * dnssd_escl_register(void *data)
 {
+  AvahiClient *c = (AvahiClient *)data;
   AvahiStringList *uscan_txt;             /* DNS-SD USCAN TXT record */
   AvahiStringList *ipp_txt;             /* DNS-SD USCAN TXT record */
   ippScanner      *scanner = NULL;
   int             error;
   char            temp[256];            /* Subtype service string */
  
-  ipp_txt = (AvahiStringList *)data;
-
   ippPrinter *printer = (ippPrinter *)calloc(1, sizeof(ippPrinter));
   ipp_request(printer, g_options.real_port);
+ /*
+  * Register _printer._tcp (LPD) with port 0 to reserve the service name...
+  */
+
+  g_options.dnssd_data->dnssd_name = strdup(printer->ty);
+
+  snprintf(temp, sizeof(temp), "http://localhost:%d/", g_options.real_port);
+  NOTE("Registering printer %s on interface %s for DNS-SD broadcasting ...",
+       g_options.dnssd_data->dnssd_name, g_options.interface);
+  //ipp_txt = (AvahiStringList *)data;
+  ipp_txt = NULL;
+  ipp_txt = avahi_string_list_add_printf(ipp_txt, "rp=ipp/print");
+  ipp_txt = avahi_string_list_add_printf(ipp_txt, "priority=60");
+  ipp_txt = avahi_string_list_add_printf(ipp_txt, "txtvers=1");
+  ipp_txt = avahi_string_list_add_printf(ipp_txt, "qtotal=1");
+
   if (printer->adminurl)
     ipp_txt = avahi_string_list_add_printf(ipp_txt, "adminurl=%s", printer->adminurl);
   else
@@ -266,24 +281,98 @@ void * dnssd_escl_register(void *data)
     ipp_txt = avahi_string_list_add_printf(ipp_txt, "usb_CMD=%s", printer->cmd);
 
   NOTE("Printer TXT[\n\tadminurl=%s\n\tUUID=%s\t\n]\n", printer->adminurl, printer->uuid);
+  if (c)
+     g_options.dnssd_data->DNSSDClient = c;
+  if (g_options.dnssd_data->ipp_ref == NULL)
+    g_options.dnssd_data->ipp_ref =
+      avahi_entry_group_new((c ? c : g_options.dnssd_data->DNSSDClient),
+			    dnssd_callback_ipp, NULL);
+
+  if (g_options.dnssd_data->ipp_ref == NULL) {
+    ERR("Could not establish Avahi entry group");
+    avahi_string_list_free(ipp_txt);
+    return NULL;
+  }
+
+  error = avahi_entry_group_add_service_strlst(
+      g_options.dnssd_data->ipp_ref,
+      (g_options.interface ? (int)if_nametoindex(g_options.interface)
+                           : AVAHI_IF_UNSPEC),
+      AVAHI_PROTO_UNSPEC, 0, g_options.dnssd_data->dnssd_name, "_printer._tcp", NULL, NULL, 0, NULL);
+  if (error)
+    ERR("Error registering %s as Unix printer (_printer._tcp): %d", g_options.dnssd_data->dnssd_name,
+	error);
+  else
+    NOTE("Registered %s as Unix printer (_printer._tcp).", g_options.dnssd_data->dnssd_name);
 
  /*
   * Then register the _ipp._tcp (IPP)...
   */
-  error = avahi_entry_group_update_service_txt_strlst(
+
+  error = avahi_entry_group_add_service_strlst(
       g_options.dnssd_data->ipp_ref,
       (g_options.interface ? (int)if_nametoindex(g_options.interface)
                            : AVAHI_IF_UNSPEC),
-      AVAHI_PROTO_UNSPEC, 0, g_options.dnssd_data->dnssd_name, "_ipp._tcp", NULL, ipp_txt);
+      AVAHI_PROTO_UNSPEC, 0, g_options.dnssd_data->dnssd_name, "_ipp._tcp", NULL, NULL,
+      g_options.real_port, ipp_txt);
 
   if (error) {
     ERR("Error registering %s as IPP printer (_ipp._tcp): %d", g_options.dnssd_data->dnssd_name,
 	error);
+  } else {
+    NOTE("Registered %s as IPP printer (_ipp._tcp).", g_options.dnssd_data->dnssd_name);
+    error = avahi_entry_group_add_service_subtype(
+        g_options.dnssd_data->ipp_ref,
+        (g_options.interface ? (int)if_nametoindex(g_options.interface)
+        : AVAHI_IF_UNSPEC),
+        AVAHI_PROTO_UNSPEC, 0, g_options.dnssd_data->dnssd_name, "_ipp._tcp", NULL,
+        "_print._sub._ipp._tcp");
+    if (error)
+      ERR("Error registering subtype for IPP printer %s (_print._sub._ipp._tcp "
+          "or _universal._sub._ipp._tcp): %d",
+          g_options.dnssd_data->dnssd_name, error);
+    else
+      NOTE(
+          "Registered subtype for IPP printer %s (_print._sub._ipp._tcp or "
+          "_universal._sub._ipp._tcp).",
+          g_options.dnssd_data->dnssd_name);
   }
+
+ /*
+  * Finally _http.tcp (HTTP) for the web interface...
+  */
+
+  error = avahi_entry_group_add_service_strlst(
+      g_options.dnssd_data->ipp_ref,
+      (g_options.interface ? (int)if_nametoindex(g_options.interface)
+                           : AVAHI_IF_UNSPEC),
+      AVAHI_PROTO_UNSPEC, 0, g_options.dnssd_data->dnssd_name, "_http._tcp", NULL, NULL,
+      g_options.real_port, NULL);
+  if (error) {
+    ERR("Error registering web interface of %s (_http._tcp): %d", g_options.dnssd_data->dnssd_name,
+	error);
+  } else {
+    NOTE("Registered web interface of %s (_http._tcp).", g_options.dnssd_data->dnssd_name);
+    error = avahi_entry_group_add_service_subtype(
+        g_options.dnssd_data->ipp_ref,
+        (g_options.interface ? (int)if_nametoindex(g_options.interface)
+                             : AVAHI_IF_UNSPEC),
+        AVAHI_PROTO_UNSPEC, 0, g_options.dnssd_data->dnssd_name, "_http._tcp", NULL,
+        "_printer._sub._http._tcp");
+    if (error)
+      ERR("Error registering subtype for web interface of %s "
+          "(_printer._sub._http._tcp): %d",
+          g_options.dnssd_data->dnssd_name, error);
+    else
+      NOTE(
+          "Registered subtype for web interface of %s "
+          "(_printer._sub._http._tcp).",
+          g_options.dnssd_data->dnssd_name);
+  }
+
   avahi_entry_group_commit(g_options.dnssd_data->ipp_ref);
   avahi_string_list_free(ipp_txt);
 
-  snprintf(temp, sizeof(temp), "http://127.0.0.1:%d/", g_options.real_port);
   scanner = (ippScanner*) calloc(1, sizeof(ippScanner));
   if (is_scanner_present(scanner, g_options.real_port) == 0 || scanner == NULL)
      goto noscanner;
@@ -366,22 +455,24 @@ noscanner:
 
 int dnssd_register(AvahiClient *c)
 {
-  AvahiStringList *ipp_txt;             /* DNS-SD IPP TXT record */
+  //AvahiStringList *ipp_txt;             // DNS-SD IPP TXT record
   char            temp[256];            /* Subtype service string */
+/*
   char            dnssd_name[1024];
   char            *dev_id = NULL;
-  const char      *make;                /* I - Manufacturer */
-  const char      *model;               /* I - Model name */
+  const char      *make;                // I - Manufacturer
+  const char      *model;               // I - Model name
   const char      *serial = NULL;
   char            *ptr;
   int             error;
+*/
   pthread_t       thread_escl;
 
  /*
   * Parse the device ID for MFG, MDL, and CMD
   */
 
-  
+  /*
   dev_id = strdup(g_options.device_id);
   NOTE("%s", "=======================================");
   NOTE("%s", dev_id);
@@ -416,33 +507,35 @@ int dnssd_register(AvahiClient *c)
     ptr = strchr(serial, ';');
     if (ptr) *ptr = '\0';
   }
+  */
  /*
   * Additional printer properties
   */
 
-  snprintf(temp, sizeof(temp), "http://localhost:%d/", g_options.real_port);
-  if (serial)
+  // snprintf(temp, sizeof(temp), "http://localhost:%d/", g_options.real_port);
+  /*if (serial)
     snprintf(dnssd_name, sizeof(dnssd_name), "%s [%s]", model, serial);
   else
     snprintf(dnssd_name, sizeof(dnssd_name), "%s", model);
   g_options.dnssd_data->dnssd_name = strdup(dnssd_name);
+  */
  /*
   * Create the TXT record for printer ...
   */
 
 //  UUID=cfe92100-67c4-11d4-a45f-f8d0273ebac3" "note=" "adminurl=http://EPSON3EBAC3.local.:80/PRESENTATION/BONJOUR"
-
+/*
   ipp_txt = NULL;
   ipp_txt = avahi_string_list_add_printf(ipp_txt, "rp=ipp/print");
   ipp_txt = avahi_string_list_add_printf(ipp_txt, "priority=60");
   ipp_txt = avahi_string_list_add_printf(ipp_txt, "txtvers=1");
   ipp_txt = avahi_string_list_add_printf(ipp_txt, "qtotal=1");
-  free(dev_id);
-
- /*
-  * Register _printer._tcp (LPD) with port 0 to reserve the service name...
-  */
-
+  // free(dev_id);
+*/
+ //
+  // Register _printer._tcp (LPD) with port 0 to reserve the service name...
+  ///
+/*
   NOTE("Registering printer %s on interface %s for DNS-SD broadcasting ...",
        dnssd_name, g_options.interface);
   if (c)
@@ -469,9 +562,9 @@ int dnssd_register(AvahiClient *c)
   else
     NOTE("Registered %s as Unix printer (_printer._tcp).", dnssd_name);
 
- /*
-  * Then register the _ipp._tcp (IPP)...
-  */
+ //
+  // Then register the _ipp._tcp (IPP)...
+  //
 
   error = avahi_entry_group_add_service_strlst(
       g_options.dnssd_data->ipp_ref,
@@ -502,9 +595,9 @@ int dnssd_register(AvahiClient *c)
           dnssd_name);
   }
 
- /*
-  * Finally _http.tcp (HTTP) for the web interface...
-  */
+ //
+  // Finally _http.tcp (HTTP) for the web interface...
+  //
 
   error = avahi_entry_group_add_service_strlst(
       g_options.dnssd_data->ipp_ref,
@@ -533,7 +626,7 @@ int dnssd_register(AvahiClient *c)
           "(_printer._sub._http._tcp).",
           dnssd_name);
   }
-
+*/
  /*
   * Commit it printer ...
   */
@@ -541,7 +634,7 @@ int dnssd_register(AvahiClient *c)
   // avahi_entry_group_commit(g_options.dnssd_data->ipp_ref);
 
 
-  pthread_create (&thread_escl, NULL, dnssd_escl_register, ipp_txt);
+  pthread_create (&thread_escl, NULL, dnssd_escl_register, c);
 
   return 0;
 }
