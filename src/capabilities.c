@@ -365,7 +365,7 @@ free_printer(ippPrinter *printer)
 }
 
 static char *
-http_request(const char *hostname, const char *ressource, int port, int *size_data)
+http_request(const char *hostname, const char *resource, int port, int *size_data)
 {
   http_t	*http = NULL;		/* HTTP connection */
   http_status_t	status = HTTP_STATUS_OK;			/* Status of GET command */
@@ -374,18 +374,99 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
   off_t		total;		        /* Total bytes */
   const char	*encoding;		/* Negotiated Content-Encoding */
   char *memory = (char*)calloc(1, sizeof (char));
+  int i = 0;
+  int new_auth = 0;
   char *tmp = NULL;
 //////////////////////////////////////////////////////////////////////////////////////////////////////:
   http = httpConnect2(hostname, port, NULL, AF_UNSPEC, HTTP_ENCRYPTION_NEVER, 1, 30000, NULL);
-  if (http == NULL)
+    if (http == NULL)
     {
       perror(hostname);
-      return 0;
+      return NULL;
     }
+    printf("Checking file \"%s\"...\n", resource);
 
-  NOTE("Checking file \"%s\"...\n", ressource);
+    new_auth = 0;
 
-  do
+    do
+    {
+      if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
+      {
+		httpClearFields(http);
+		if (httpReconnect2(http, 30000, NULL))
+		{
+			  status = HTTP_STATUS_ERROR;
+			  break;
+		}
+      }
+
+      httpClearFields(http);
+      httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
+      httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
+
+      if (httpGet(http, resource))
+      {
+        if (httpReconnect2(http, 30000, NULL))
+        {
+          status = HTTP_STATUS_ERROR;
+          break;
+        }
+        else
+        {
+          status = HTTP_STATUS_UNAUTHORIZED;
+          continue;
+        }
+      }
+
+      while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
+
+      new_auth = 0;
+
+      if (status == HTTP_STATUS_UNAUTHORIZED)
+      {
+       /*
+	* Flush any error message...
+	*/
+
+	httpFlush(http);
+
+       /*
+	* See if we can do authentication...
+	*/
+
+        new_auth = 1;
+
+	if (cupsDoAuthentication(http, "HEAD", resource))
+	{
+	  status = HTTP_STATUS_CUPS_AUTHORIZATION_CANCELED;
+	  break;
+	}
+
+	if (httpReconnect2(http, 30000, NULL))
+	{
+	  status = HTTP_STATUS_ERROR;
+	  break;
+	}
+
+	continue;
+      }
+    }
+    while (status == HTTP_STATUS_UNAUTHORIZED ||
+           status == HTTP_STATUS_UPGRADE_REQUIRED);
+
+    if (status == HTTP_STATUS_OK)
+      puts("HEAD OK:");
+    else
+      printf("HEAD failed with status %d...\n", status);
+
+    encoding = httpGetContentEncoding(http);
+
+    printf("Requesting file \"%s\" (Accept-Encoding: %s)...\n", resource,
+           encoding ? encoding : "identity");
+
+    new_auth = 0;
+
+    do
     {
       if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
       {
@@ -398,22 +479,58 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
       }
 
       httpClearFields(http);
+      httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
       httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
       httpSetField(http, HTTP_FIELD_ACCEPT_ENCODING, encoding);
 
-      if (httpGet(http, ressource))
+      if (httpGet(http, resource))
       {
         if (httpReconnect2(http, 30000, NULL))
         {
           status = HTTP_STATUS_ERROR;
           break;
         }
+        else
+        {
+          status = HTTP_STATUS_UNAUTHORIZED;
+          continue;
+        }
       }
 
       while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
 
+      new_auth = 0;
+
+      if (status == HTTP_STATUS_UNAUTHORIZED)
+      {
+       /*
+	* Flush any error message...
+	*/
+
+	httpFlush(http);
+
+       /*
+	* See if we can do authentication...
+	*/
+
+        new_auth = 1;
+
+	if (cupsDoAuthentication(http, "GET", resource))
+	{
+	  status = HTTP_STATUS_CUPS_AUTHORIZATION_CANCELED;
+	  break;
+	}
+
+	if (httpReconnect2(http, 30000, NULL))
+	{
+	  status = HTTP_STATUS_ERROR;
+	  break;
+	}
+
+	continue;
+      }
     }
-  while (status == HTTP_STATUS_UPGRADE_REQUIRED);
+    while (status == HTTP_STATUS_UNAUTHORIZED || status == HTTP_STATUS_UPGRADE_REQUIRED);
 
   if (status != HTTP_STATUS_OK)
     {
