@@ -377,14 +377,13 @@ http_request(const char *hostname, const char *resource, int port, int *size_dat
   int i = 0;
   int new_auth = 0;
   char *tmp = NULL;
-//////////////////////////////////////////////////////////////////////////////////////////////////////:
   http = httpConnect2(hostname, port, NULL, AF_UNSPEC, HTTP_ENCRYPTION_NEVER, 1, 30000, NULL);
     if (http == NULL)
     {
       perror(hostname);
       return NULL;
     }
-    printf("Checking file \"%s\"...\n", resource);
+    NOTE("Checking file \"%s\"...\n", resource);
 
     new_auth = 0;
 
@@ -455,13 +454,13 @@ http_request(const char *hostname, const char *resource, int port, int *size_dat
            status == HTTP_STATUS_UPGRADE_REQUIRED);
 
     if (status == HTTP_STATUS_OK)
-      puts("HEAD OK:");
+      NOTE("HEAD OK:");
     else
-      printf("HEAD failed with status %d...\n", status);
+      NOTE("HEAD failed with status %d...\n", status);
 
     encoding = httpGetContentEncoding(http);
 
-    printf("Requesting file \"%s\" (Accept-Encoding: %s)...\n", resource,
+    NOTE("Requesting file \"%s\" (Accept-Encoding: %s)...\n", resource,
            encoding ? encoding : "identity");
 
     new_auth = 0;
