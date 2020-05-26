@@ -188,17 +188,18 @@ char * get_format_paper(char *val)
 {
    int x_dim_max = 0, x_dim = 0;
    int y_dim_max = 0, y_dim = 0;
+   int a = 0;
    if (!val) return NULL;
    
    while ((val = strchr(val, '{'))) {
-		   val++;
-		   char test1[255] = { 0 };
-		   char test2[255] = { 0 };
+	       val++;
+	       char test1[255] = { 0 };
+	       char test2[255] = { 0 };
 		   
 	       char *tmp = strchr(val, '=');
 	       if (!tmp) continue;
-		   int a = strlen(val) - strlen(tmp);
-		   val+=(a + 1);
+	       a = strlen(val) - strlen(tmp);
+	       val+=(a + 1);
 	       
 	       tmp = strchr(val, ' ');
 	       if (!tmp) continue;
@@ -206,14 +207,14 @@ char * get_format_paper(char *val)
 	       strncpy(test2, val, a);
 	       if (strchr(test2, '-') == NULL)
 			   x_dim = atoi(test2);
-		   val+=(a + 1);
+	       val+=(a + 1);
 		   
-		   memset(test1, 0, 255);
-		   memset(test2, 0, 255);
+	       memset(test1, 0, 255);
+	       memset(test2, 0, 255);
 	       if (!tmp) continue;
-		   tmp = strchr(val, '=');
-		   a = strlen(val) - strlen(tmp);
-		   val+=(a + 1);
+	       tmp = strchr(val, '=');
+	       a = strlen(val) - strlen(tmp);
+	       val+=(a + 1);
 	       
 	       if (!tmp) continue;
 	       tmp = strchr(val, '}');
@@ -230,6 +231,20 @@ char * get_format_paper(char *val)
 		   val+=(a + 1);
    }
    return get_format(x_dim_max, y_dim_max);
+}
+
+static char *
+_search_tag(char *buffer, const char *tag)
+{
+    char *result = NULL;
+    char *tmp = strstr(buffer, tag);
+    if (tmp) {
+       char *c = strchr(tmp, ';');
+       *c = 0;
+       result = strdup(tmp + 4);
+       *c = ';';
+    }
+    return result;
 }
 
 int
@@ -265,6 +280,15 @@ ipp_request(ippPrinter *printer, int port)
     if (!attr_name) continue;
     if (!strcasecmp(attr_name, "printer-icons"))
        printer->representation = strdup(buffer);
+    else if (!strcasecmp(attr_name, "printer-device-id")) {
+//     usb_MDL:          MDL, extracted from "printer-device-id"
+//     usb_MFG:          MFG, extracted from "printer-device-id"
+//     usb_CMD:          CMD, extracted from "printer-device-id"
+//     MFG:Brother;CMD:PJL,HBP,URF;MDL:DCP-L2530DW series;CLS:PRINTER;CID:Brother Laser Type1;URF:W8,CP1,IS4-1,MT1-3-4-5-8,OB10,PQ3-4-5,RS300-600-1200,V1.4,DM1;[en]
+       printer->mfg = _search_tag(buffer, "MFG:");
+       printer->mdl = _search_tag(buffer, "MDL:");
+       printer->cmd = _search_tag(buffer, "CMD:");
+    }
     else if(!strcasecmp(attr_name, "printer-uuid"))
        printer->uuid = strdup(buffer + 9);
     else if(!strcasecmp(attr_name, "printer-more-info"))
@@ -342,7 +366,7 @@ free_printer(ippPrinter *printer)
 }
 
 static char *
-http_request(const char *hostname, const char *ressource, int port, int *size_data)
+http_request(const char *hostname, const char *resource, int port, int *size_data)
 {
   http_t	*http = NULL;		/* HTTP connection */
   http_status_t	status = HTTP_STATUS_OK;			/* Status of GET command */
@@ -352,45 +376,151 @@ http_request(const char *hostname, const char *ressource, int port, int *size_da
   const char	*encoding;		/* Negotiated Content-Encoding */
   char *memory = (char*)calloc(1, sizeof (char));
   char *tmp = NULL;
-//////////////////////////////////////////////////////////////////////////////////////////////////////:
+
   http = httpConnect2(hostname, port, NULL, AF_UNSPEC, HTTP_ENCRYPTION_NEVER, 1, 30000, NULL);
   if (http == NULL)
-    {
-      perror(hostname);
-      return 0;
-    }
-
-  NOTE("Checking file \"%s\"...\n", ressource);
+  {
+    perror(hostname);
+    return NULL;
+  }
+  NOTE("Checking file \"%s\"...\n", resource);
 
   do
+  {
+    if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
     {
-      if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
-      {
-	httpClearFields(http);
-	if (httpReconnect2(http, 30000, NULL))
-	{
-          status = HTTP_STATUS_ERROR;
-          break;
-	}
-      }
-
-      httpClearFields(http);
-      httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
-      httpSetField(http, HTTP_FIELD_ACCEPT_ENCODING, encoding);
-
-      if (httpGet(http, ressource))
-      {
-        if (httpReconnect2(http, 30000, NULL))
-        {
-          status = HTTP_STATUS_ERROR;
-          break;
-        }
-      }
-
-      while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
-
+      	httpClearFields(http);
+      	if (httpReconnect2(http, 30000, NULL))
+      	{
+      		  status = HTTP_STATUS_ERROR;
+      		  break;
+      	}
     }
-  while (status == HTTP_STATUS_UPGRADE_REQUIRED);
+
+    httpClearFields(http);
+    httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
+    httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
+
+    if (httpGet(http, resource))
+    {
+      if (httpReconnect2(http, 30000, NULL))
+      {
+        status = HTTP_STATUS_ERROR;
+        break;
+      }
+      else
+      {
+        status = HTTP_STATUS_UNAUTHORIZED;
+        continue;
+      }
+    }
+
+    while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
+
+    if (status == HTTP_STATUS_UNAUTHORIZED)
+    {
+     /*
+      * Flush any error message...
+      */
+
+      httpFlush(http);
+
+     /*
+      * See if we can do authentication...
+      */
+
+      if (cupsDoAuthentication(http, "HEAD", resource))
+      {
+        status = HTTP_STATUS_CUPS_AUTHORIZATION_CANCELED;
+        break;
+      }
+
+      if (httpReconnect2(http, 30000, NULL))
+      {
+        status = HTTP_STATUS_ERROR;
+        break;
+      }
+
+      continue;
+    }
+  }
+  while (status == HTTP_STATUS_UNAUTHORIZED ||
+         status == HTTP_STATUS_UPGRADE_REQUIRED);
+
+  if (status == HTTP_STATUS_OK)
+    NOTE("HEAD OK:");
+  else
+    NOTE("HEAD failed with status %d...\n", status);
+
+  encoding = httpGetContentEncoding(http);
+
+  NOTE("Requesting file \"%s\" (Accept-Encoding: %s)...\n", resource,
+         encoding ? encoding : "identity");
+
+
+  do
+  {
+    if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
+    {
+      httpClearFields(http);
+      if (httpReconnect2(http, 30000, NULL))
+      {
+        status = HTTP_STATUS_ERROR;
+        break;
+      }
+    }
+
+    httpClearFields(http);
+    httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
+    httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
+    httpSetField(http, HTTP_FIELD_ACCEPT_ENCODING, encoding);
+
+    if (httpGet(http, resource))
+    {
+      if (httpReconnect2(http, 30000, NULL))
+      {
+        status = HTTP_STATUS_ERROR;
+        break;
+      }
+      else
+      {
+        status = HTTP_STATUS_UNAUTHORIZED;
+        continue;
+      }
+    }
+
+    while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
+
+
+    if (status == HTTP_STATUS_UNAUTHORIZED)
+    {
+     /*
+      * Flush any error message...
+      */
+
+      httpFlush(http);
+
+     /*
+      * See if we can do authentication...
+      */
+
+
+      if (cupsDoAuthentication(http, "GET", resource))
+      {
+        status = HTTP_STATUS_CUPS_AUTHORIZATION_CANCELED;
+        break;
+      }
+
+      if (httpReconnect2(http, 30000, NULL))
+      {
+        status = HTTP_STATUS_ERROR;
+        break;
+      }
+
+      continue;
+    }
+  }
+  while (status == HTTP_STATUS_UNAUTHORIZED || status == HTTP_STATUS_UPGRADE_REQUIRED);
 
   if (status != HTTP_STATUS_OK)
     {

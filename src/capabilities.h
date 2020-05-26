@@ -27,6 +27,9 @@ typedef struct {
   char *ty;
   char *side;
   char *fax;
+  char *mdl;
+  char *mfg;
+  char *cmd;
 } ippPrinter;
 
 int is_scanner_present(ippScanner *scanner, int port);
