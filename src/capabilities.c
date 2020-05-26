@@ -188,17 +188,18 @@ char * get_format_paper(char *val)
 {
    int x_dim_max = 0, x_dim = 0;
    int y_dim_max = 0, y_dim = 0;
+   int a = 0;
    if (!val) return NULL;
    
    while ((val = strchr(val, '{'))) {
-		   val++;
-		   char test1[255] = { 0 };
-		   char test2[255] = { 0 };
+	       val++;
+	       char test1[255] = { 0 };
+	       char test2[255] = { 0 };
 		   
 	       char *tmp = strchr(val, '=');
 	       if (!tmp) continue;
-		   int a = strlen(val) - strlen(tmp);
-		   val+=(a + 1);
+	       a = strlen(val) - strlen(tmp);
+	       val+=(a + 1);
 	       
 	       tmp = strchr(val, ' ');
 	       if (!tmp) continue;
@@ -206,14 +207,14 @@ char * get_format_paper(char *val)
 	       strncpy(test2, val, a);
 	       if (strchr(test2, '-') == NULL)
 			   x_dim = atoi(test2);
-		   val+=(a + 1);
+	       val+=(a + 1);
 		   
-		   memset(test1, 0, 255);
-		   memset(test2, 0, 255);
+	       memset(test1, 0, 255);
+	       memset(test2, 0, 255);
 	       if (!tmp) continue;
-		   tmp = strchr(val, '=');
-		   a = strlen(val) - strlen(tmp);
-		   val+=(a + 1);
+	       tmp = strchr(val, '=');
+	       a = strlen(val) - strlen(tmp);
+	       val+=(a + 1);
 	       
 	       if (!tmp) continue;
 	       tmp = strchr(val, '}');
@@ -374,162 +375,152 @@ http_request(const char *hostname, const char *resource, int port, int *size_dat
   off_t		total;		        /* Total bytes */
   const char	*encoding;		/* Negotiated Content-Encoding */
   char *memory = (char*)calloc(1, sizeof (char));
-  int i = 0;
-  int new_auth = 0;
   char *tmp = NULL;
+
   http = httpConnect2(hostname, port, NULL, AF_UNSPEC, HTTP_ENCRYPTION_NEVER, 1, 30000, NULL);
-    if (http == NULL)
+  if (http == NULL)
+  {
+    perror(hostname);
+    return NULL;
+  }
+  NOTE("Checking file \"%s\"...\n", resource);
+
+  do
+  {
+    if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
     {
-      perror(hostname);
-      return NULL;
+      	httpClearFields(http);
+      	if (httpReconnect2(http, 30000, NULL))
+      	{
+      		  status = HTTP_STATUS_ERROR;
+      		  break;
+      	}
     }
-    NOTE("Checking file \"%s\"...\n", resource);
 
-    new_auth = 0;
+    httpClearFields(http);
+    httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
+    httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
 
-    do
+    if (httpGet(http, resource))
     {
-      if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
+      if (httpReconnect2(http, 30000, NULL))
       {
-		httpClearFields(http);
-		if (httpReconnect2(http, 30000, NULL))
-		{
-			  status = HTTP_STATUS_ERROR;
-			  break;
-		}
+        status = HTTP_STATUS_ERROR;
+        break;
+      }
+      else
+      {
+        status = HTTP_STATUS_UNAUTHORIZED;
+        continue;
+      }
+    }
+
+    while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
+
+    if (status == HTTP_STATUS_UNAUTHORIZED)
+    {
+     /*
+      * Flush any error message...
+      */
+
+      httpFlush(http);
+
+     /*
+      * See if we can do authentication...
+      */
+
+      if (cupsDoAuthentication(http, "HEAD", resource))
+      {
+        status = HTTP_STATUS_CUPS_AUTHORIZATION_CANCELED;
+        break;
       }
 
+      if (httpReconnect2(http, 30000, NULL))
+      {
+        status = HTTP_STATUS_ERROR;
+        break;
+      }
+
+      continue;
+    }
+  }
+  while (status == HTTP_STATUS_UNAUTHORIZED ||
+         status == HTTP_STATUS_UPGRADE_REQUIRED);
+
+  if (status == HTTP_STATUS_OK)
+    NOTE("HEAD OK:");
+  else
+    NOTE("HEAD failed with status %d...\n", status);
+
+  encoding = httpGetContentEncoding(http);
+
+  NOTE("Requesting file \"%s\" (Accept-Encoding: %s)...\n", resource,
+         encoding ? encoding : "identity");
+
+
+  do
+  {
+    if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
+    {
       httpClearFields(http);
-      httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
-      httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
-
-      if (httpGet(http, resource))
+      if (httpReconnect2(http, 30000, NULL))
       {
-        if (httpReconnect2(http, 30000, NULL))
-        {
-          status = HTTP_STATUS_ERROR;
-          break;
-        }
-        else
-        {
-          status = HTTP_STATUS_UNAUTHORIZED;
-          continue;
-        }
-      }
-
-      while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
-
-      new_auth = 0;
-
-      if (status == HTTP_STATUS_UNAUTHORIZED)
-      {
-       /*
-	* Flush any error message...
-	*/
-
-	httpFlush(http);
-
-       /*
-	* See if we can do authentication...
-	*/
-
-        new_auth = 1;
-
-	if (cupsDoAuthentication(http, "HEAD", resource))
-	{
-	  status = HTTP_STATUS_CUPS_AUTHORIZATION_CANCELED;
-	  break;
-	}
-
-	if (httpReconnect2(http, 30000, NULL))
-	{
-	  status = HTTP_STATUS_ERROR;
-	  break;
-	}
-
-	continue;
+        status = HTTP_STATUS_ERROR;
+        break;
       }
     }
-    while (status == HTTP_STATUS_UNAUTHORIZED ||
-           status == HTTP_STATUS_UPGRADE_REQUIRED);
 
-    if (status == HTTP_STATUS_OK)
-      NOTE("HEAD OK:");
-    else
-      NOTE("HEAD failed with status %d...\n", status);
+    httpClearFields(http);
+    httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
+    httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
+    httpSetField(http, HTTP_FIELD_ACCEPT_ENCODING, encoding);
 
-    encoding = httpGetContentEncoding(http);
-
-    NOTE("Requesting file \"%s\" (Accept-Encoding: %s)...\n", resource,
-           encoding ? encoding : "identity");
-
-    new_auth = 0;
-
-    do
+    if (httpGet(http, resource))
     {
-      if (!strcasecmp(httpGetField(http, HTTP_FIELD_CONNECTION), "close"))
+      if (httpReconnect2(http, 30000, NULL))
       {
-	httpClearFields(http);
-	if (httpReconnect2(http, 30000, NULL))
-	{
-          status = HTTP_STATUS_ERROR;
-          break;
-	}
+        status = HTTP_STATUS_ERROR;
+        break;
       }
-
-      httpClearFields(http);
-      httpSetField(http, HTTP_FIELD_AUTHORIZATION, httpGetAuthString(http));
-      httpSetField(http, HTTP_FIELD_ACCEPT_LANGUAGE, "en");
-      httpSetField(http, HTTP_FIELD_ACCEPT_ENCODING, encoding);
-
-      if (httpGet(http, resource))
+      else
       {
-        if (httpReconnect2(http, 30000, NULL))
-        {
-          status = HTTP_STATUS_ERROR;
-          break;
-        }
-        else
-        {
-          status = HTTP_STATUS_UNAUTHORIZED;
-          continue;
-        }
-      }
-
-      while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
-
-      new_auth = 0;
-
-      if (status == HTTP_STATUS_UNAUTHORIZED)
-      {
-       /*
-	* Flush any error message...
-	*/
-
-	httpFlush(http);
-
-       /*
-	* See if we can do authentication...
-	*/
-
-        new_auth = 1;
-
-	if (cupsDoAuthentication(http, "GET", resource))
-	{
-	  status = HTTP_STATUS_CUPS_AUTHORIZATION_CANCELED;
-	  break;
-	}
-
-	if (httpReconnect2(http, 30000, NULL))
-	{
-	  status = HTTP_STATUS_ERROR;
-	  break;
-	}
-
-	continue;
+        status = HTTP_STATUS_UNAUTHORIZED;
+        continue;
       }
     }
-    while (status == HTTP_STATUS_UNAUTHORIZED || status == HTTP_STATUS_UPGRADE_REQUIRED);
+
+    while ((status = httpUpdate(http)) == HTTP_STATUS_CONTINUE);
+
+
+    if (status == HTTP_STATUS_UNAUTHORIZED)
+    {
+     /*
+      * Flush any error message...
+      */
+
+      httpFlush(http);
+
+     /*
+      * See if we can do authentication...
+      */
+
+
+      if (cupsDoAuthentication(http, "GET", resource))
+      {
+        status = HTTP_STATUS_CUPS_AUTHORIZATION_CANCELED;
+        break;
+      }
+
+      if (httpReconnect2(http, 30000, NULL))
+      {
+        status = HTTP_STATUS_ERROR;
+        break;
+      }
+
+      continue;
+    }
+  }
+  while (status == HTTP_STATUS_UNAUTHORIZED || status == HTTP_STATUS_UPGRADE_REQUIRED);
 
   if (status != HTTP_STATUS_OK)
     {
