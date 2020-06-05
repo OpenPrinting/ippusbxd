@@ -25,7 +25,7 @@
 #include "http.h"
 #include "logging.h"
 
-#define BUFFER_STEP (1 << 12)
+#define BUFFER_STEP (1 << 15)
 
 struct http_packet_t *packet_new()
 {
