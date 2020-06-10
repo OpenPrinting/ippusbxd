@@ -16,6 +16,27 @@
 #include "logging.h"
 #include "options.h"
 
+// Now classify by printer size
+//                  US name      US inches   US mm           ISO mm
+//   "legal-A4"     A, Legal     8.5 x 14    215.9 x 355.6   A4: 210 x 297
+//   "tabloid-A3"   B, Tabloid   11 x 17     279.4 x 431.8   A3: 297 x 420
+//   "isoC-A2"      C            17 × 22     431.8 × 558,8   A2: 420 x 594
+//
+// Please note, Apple in the "Bonjour Printing Specification"
+// incorrectly states paper sizes as 9x14, 13x19 and 18x24 inches
+#define LEGAL_X    21590
+#define LEGAL_Y    35560
+#define A4_X       21000
+#define A4_Y       29700
+#define TABLOID_X  27940
+#define TABLOID_Y  43180
+#define A3_X       29700
+#define A3_Y       42000
+#define ISOC_X     43180
+#define ISOC_Y     55880
+#define A2_X       42000
+#define A2_Y       59400
+
 struct cap
 {
     char *memory;
@@ -146,41 +167,38 @@ void afficher_noeud(xmlNodePtr noeud, ippScanner *ippscanner) {
     }
 }
 
+static int
+value_papersize_less(int p1w, int p1h, int p2w, int p2h) {
+	return ((p1w < p2w && p1h <= p2h) || (p1h < p2h && p1w <= p2w));
+}
+
+// Classify paper size according to Apple Bonjour rules
+// Returns:
+//     ">isoC-A2" for paper larger that C or A2
+//     "isoC-A2" for C or A2 paper
+//     "tabloid-A3" for Tabloid or A3 paper
+//     "legal-A4" for Legal or A4 paper
+//     "<legal-A4" for paper smaller that Legal or A4
 static char *get_format(int x_dim_max, int y_dim_max)
 {
         if (x_dim_max == 0 || y_dim_max == 0) {
                 return NULL;
         }
 
-        // Now classify by printer size
-        //                  US name      US inches   US mm           ISO mm
-        //   "legal-A4"     A, Legal     8.5 x 14    215.9 x 355.6   A4: 210 x 297
-        //   "tabloid-A3"   B, Tabloid   11 x 17     279.4 x 431.8   A3: 297 x 420
-        //   "isoC-A2"      C            17 × 22     431.8 × 558,8   A2: 420 x 594
-        //
-        // Please note, Apple in the "Bonjour Printing Specification"
-        // incorrectly states paper sizes as 9x14, 13x19 and 18x24 inches
-
-        int legal_a4_x   = 21590,
-            legal_a4_y   = 35560,
-            tabloid_a3_x = 29700,
-            tabloid_a3_y = 43180,
-            isoC_a2_x    = 43180,
-            isoC_a2_y    = 55880;
-
-        if (x_dim_max > isoC_a2_x && y_dim_max > isoC_a2_y)
-                return strdup(">isoC-A2");
-
-        if (x_dim_max >= isoC_a2_x && y_dim_max >= isoC_a2_y)
-                return strdup("isoC-A2");
-
-        if (x_dim_max >= tabloid_a3_x && y_dim_max >= tabloid_a3_y)
-                return strdup("tabloid-A3");
-
-        if (x_dim_max >= legal_a4_x && y_dim_max >= legal_a4_y)
-                return strdup("legal-A4");
-
-        return strdup("<legal-A4");
+	if (value_papersize_less(ISOC_X, x_dim_max, ISOC_Y, y_dim_max) ||
+	    value_papersize_less(A2_X, x_dim_max, A2_Y, y_dim_max))
+		return strdup(">isoC-A2");
+	else if (!value_papersize_less(x_dim_max, ISOC_X, y_dim_max, ISOC_Y) ||
+	         !value_papersize_less(x_dim_max, A2_X, y_dim_max, A2_Y))
+		return strdup("isoC-A2");
+	else if (!value_papersize_less(x_dim_max, TABLOID_X, y_dim_max, TABLOID_Y) ||
+	         !value_papersize_less(x_dim_max, A3_X, y_dim_max, A3_Y))
+		return strdup("tabloid-A3");
+	else if (!value_papersize_less(x_dim_max, LEGAL_X, y_dim_max, LEGAL_Y) ||
+	         !value_papersize_less(x_dim_max, A4_X, y_dim_max, A4_Y))
+		return strdup("legal-A4");
+	else
+		return strdup("<legal-A4");
 }
 
 
