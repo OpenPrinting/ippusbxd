@@ -16,6 +16,27 @@
 #include "logging.h"
 #include "options.h"
 
+// Now classify by printer size
+//                  US name      US inches   US mm           ISO mm
+//   "legal-A4"     A, Legal     8.5 x 14    215.9 x 355.6   A4: 210 x 297
+//   "tabloid-A3"   B, Tabloid   11 x 17     279.4 x 431.8   A3: 297 x 420
+//   "isoC-A2"      C            17 × 22     431.8 × 558,8   A2: 420 x 594
+//
+// Please note, Apple in the "Bonjour Printing Specification"
+// incorrectly states paper sizes as 9x14, 13x19 and 18x24 inches
+#define LEGAL_X    21590
+#define LEGAL_Y    35560
+#define A4_X       21000
+#define A4_Y       29700
+#define TABLOID_X  27940
+#define TABLOID_Y  43180
+#define A3_X       29700
+#define A3_Y       42000
+#define ISOC_X     43180
+#define ISOC_Y     55880
+#define A2_X       42000
+#define A2_Y       59400
+
 struct cap
 {
     char *memory;
@@ -164,39 +185,17 @@ static char *get_format(int x_dim_max, int y_dim_max)
                 return NULL;
         }
 
-        // Now classify by printer size
-        //                  US name      US inches   US mm           ISO mm
-        //   "legal-A4"     A, Legal     8.5 x 14    215.9 x 355.6   A4: 210 x 297
-        //   "tabloid-A3"   B, Tabloid   11 x 17     279.4 x 431.8   A3: 297 x 420
-        //   "isoC-A2"      C            17 × 22     431.8 × 558,8   A2: 420 x 594
-        //
-        // Please note, Apple in the "Bonjour Printing Specification"
-        // incorrectly states paper sizes as 9x14, 13x19 and 18x24 inches
-
-        int legal_x   = 21590,
-            legal_y   = 35560,
-            a4_x      = 21000,
-            a4_y      = 29700,
-            tabloid_x = 27940,
-            tabloid_y = 43180,
-            a3_x      = 29700,
-            a3_y      = 42000,
-            isoC_x    = 43180,
-            isoC_y    = 55880,
-            a2_x      = 42000,
-            a2_y      = 59400;
-
-	if (value_papersize_less(isoC_x, x_dim_max, isoC_y, y_dim_max) ||
-	    value_papersize_less(a2_x, x_dim_max, a2_y, y_dim_max))
+	if (value_papersize_less(ISOC_X, x_dim_max, ISOC_Y, y_dim_max) ||
+	    value_papersize_less(A2_X, x_dim_max, A2_Y, y_dim_max))
 		return strdup(">isoC-A2");
-	else if (!value_papersize_less(x_dim_max, isoC_x, y_dim_max, isoC_y) ||
-	         !value_papersize_less(x_dim_max, a2_x, y_dim_max, a2_y))
+	else if (!value_papersize_less(x_dim_max, ISOC_X, y_dim_max, ISOC_Y) ||
+	         !value_papersize_less(x_dim_max, A2_X, y_dim_max, A2_Y))
 		return strdup("isoC-A2");
-	else if (!value_papersize_less(x_dim_max, tabloid_x, y_dim_max, tabloid_y) ||
-	         !value_papersize_less(x_dim_max, a3_x, y_dim_max, a3_y))
+	else if (!value_papersize_less(x_dim_max, TABLOID_X, y_dim_max, TABLOID_Y) ||
+	         !value_papersize_less(x_dim_max, A3_X, y_dim_max, A3_Y))
 		return strdup("tabloid-A3");
-	else if (!value_papersize_less(x_dim_max, legal_x, y_dim_max, legal_y) ||
-	         !value_papersize_less(x_dim_max, a4_x, y_dim_max, a4_y))
+	else if (!value_papersize_less(x_dim_max, LEGAL_X, y_dim_max, LEGAL_Y) ||
+	         !value_papersize_less(x_dim_max, A4_X, y_dim_max, A4_Y))
 		return strdup("legal-A4");
 	else
 		return strdup("<legal-A4");
