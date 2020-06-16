@@ -30,6 +30,7 @@ typedef struct {
   char *mdl;
   char *mfg;
   char *cmd;
+  int appleraster;
 } ippPrinter;
 
 int is_scanner_present(ippScanner *scanner, int port);

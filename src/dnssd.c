@@ -326,7 +326,7 @@ void * dnssd_escl_register(void *data)
         (g_options.interface ? (int)if_nametoindex(g_options.interface)
         : AVAHI_IF_UNSPEC),
         AVAHI_PROTO_UNSPEC, 0, g_options.dnssd_data->dnssd_name, "_ipp._tcp", NULL,
-        "_print._sub._ipp._tcp");
+        printer->appleraster ? "_universal._sub._ipp._tcp" : "_print._sub._ipp._tcp");
     if (error)
       ERR("Error registering subtype for IPP printer %s (_print._sub._ipp._tcp "
           "or _universal._sub._ipp._tcp): %d",
