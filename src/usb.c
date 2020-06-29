@@ -615,19 +615,6 @@ struct usb_conn_t *usb_conn_acquire(struct usb_sock_t *usb)
 {
   int i;
 
-  if (usb->num_avail <= 0) {
-    NOTE("All USB interfaces busy, waiting ...");
-    for (i = 0; i < 30 && usb->num_avail <= 0; i ++) {
-      if (g_options.terminate)
-	return NULL;
-      usleep(100000);
-    }
-    if (usb->num_avail <= 0) {
-      ERR("Timed out waiting for a free USB interface");
-      return NULL;
-    }
-  }
-
   struct usb_conn_t *conn = calloc(1, sizeof(*conn));
   if (conn == NULL) {
     ERR("Failed to alloc space for usb connection");
@@ -636,6 +623,23 @@ struct usb_conn_t *usb_conn_acquire(struct usb_sock_t *usb)
 
   sem_wait(&usb->pool_manage_lock);
   {
+    if (usb->num_avail <= 0) {
+      NOTE("All USB interfaces busy, waiting ...");
+      for (i = 0; i < 30 && usb->num_avail <= 0; i ++) {
+	if (g_options.terminate)
+	  goto error;
+
+	// Release the lock while we sleep.
+	sem_post(&usb->pool_manage_lock);
+	usleep(100000);
+	sem_wait(&usb->pool_manage_lock);
+      }
+      if (usb->num_avail <= 0) {
+	ERR("Timed out waiting for a free USB interface");
+	goto error;
+      }
+    }
+
     conn->parent = usb;
 
     uint32_t slot = usb->num_taken;
@@ -649,7 +653,7 @@ struct usb_conn_t *usb_conn_acquire(struct usb_sock_t *usb)
       ERR("Interface #%d (%d) already in use!",
 	  conn->interface_index,
 	  uf->libusb_interface_index);
-      goto acquire_error;
+      goto error;
     }
 
     /* Take successfully acquired interface from the pool */
@@ -659,8 +663,7 @@ struct usb_conn_t *usb_conn_acquire(struct usb_sock_t *usb)
   sem_post(&usb->pool_manage_lock);
   return conn;
 
- acquire_error:
-
+ error:
   sem_post(&usb->pool_manage_lock);
   free(conn);
   return NULL;
