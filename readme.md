@@ -46,7 +46,9 @@ Bumping into problems when trying to scan via IPP-over-USB with ippusbxd, the au
 >
 >And this is what the ipp-usb program actually does.
 
-ipp-usb is written in Go, as Go provides an HTTP library with the needed functionality, which is missing in C. As Go links executables statically, they have a large memory footprint. As some operating system vendors (like ChromeOS) therefore do not accept Go programs, the ippusbxd project will be continued and pathes to fix ippusbxd are welcome.
+ipp-usb is written in Go, as Go provides an HTTP library with the needed functionality, which is missing in C. But as Go links executables statically, they have a large memory footprint. Therefore the ChromeOS developers do not accept Go programs and continued with ippusbxd for some time and later they came with another from-scratch approach, [ippusb_bridge](https://github.com/dgreid/platform2/tree/master/ippusb_bridge), written in Rust.
+
+Due to this there is no known operating system using ippusbxd any more. Therefore **development of this project is currently suspended**. Nevertheless, anyone coming up with a solution of ippusbxd's problems, making it working as well as ipp-usb is highly welcome and we are open for appropriate Pull Requests.
 
 Generally, I highly recommend to use ipp-usb instead of ippusbxd. It works absolutely reliably, wheras ippusbxd often has problems, especially with the web admin interfaces of the devices.
 
