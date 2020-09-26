@@ -299,6 +299,7 @@ ipp_request(ippPrinter *printer, int port)
     if (!strcasecmp(attr_name, "printer-icons"))
        printer->representation = strdup(buffer);
     else if (!strcasecmp(attr_name, "printer-device-id")) {
+       char *ptr = NULL;
 //     usb_MDL:          MDL, extracted from "printer-device-id"
 //     usb_MFG:          MFG, extracted from "printer-device-id"
 //     usb_CMD:          CMD, extracted from "printer-device-id"
@@ -306,6 +307,10 @@ ipp_request(ippPrinter *printer, int port)
        printer->mfg = _search_tag(buffer, "MFG:");
        printer->mdl = _search_tag(buffer, "MDL:");
        printer->cmd = _search_tag(buffer, "CMD:");
+        if (((ptr = strcasestr(printer->cmd, "apple")) != NULL &&
+             strcasestr(ptr, "raster") != NULL) ||
+             strcasestr(printer->cmd, "urf") != NULL)
+          printer->appleraster = 1;
     }
     else if(!strcasecmp(attr_name, "printer-uuid"))
        printer->uuid = strdup(buffer + 9);
